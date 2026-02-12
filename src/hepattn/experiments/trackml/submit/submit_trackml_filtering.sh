@@ -4,7 +4,7 @@
 #SBATCH -p GPU
 #SBATCH --nodes=1
 #SBATCH --export=ALL
-#SBATCH --gres=gpu:l40s:1
+#SBATCH --gres=gpu:a100:1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=10
 #SBATCH --mem=50G
@@ -38,7 +38,7 @@ nvidia-smi
 echo "Running training script..."
 
 # Python command that will be run
-PYTORCH_CMD="python run_filtering.py fit --config configs/filtering.yaml"
+PYTORCH_CMD="python run_filtering.py fit --config configs/first_hit_selection.yaml"
 # PYTORCH_CMD="python run_tracking.py fit --config configs/tracking.yaml"
 
 # Do testing instead
