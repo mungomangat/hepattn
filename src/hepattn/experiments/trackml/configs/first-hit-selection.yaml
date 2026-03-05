@@ -155,13 +155,13 @@ model:
           hybrid_norm: true
           norm: RMSNorm
 
-      encoder_tasks:
+      tasks:
         class_path: torch.nn.ModuleList
         init_args:
           modules:
             - class_path: hepattn.models.task.ClassificationTask
               init_args:
-                name: query_init
+                name: hit_filter
                 input_object: hit
                 classes: ["is_first"]
                 loss_weight: 1.0
