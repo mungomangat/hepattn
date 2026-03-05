@@ -42,8 +42,8 @@ nvidia-smi
 echo "Running training script..."
 
 # Python command that will be run
-#PYTORCH_CMD="python run_filtering.py fit --config configs/filtering.yaml"
-PYTORCH_CMD="python run_tracking.py fit --config configs/tracking.yaml --trainer.devices 1"
+PYTORCH_CMD="python run_filtering.py fit --config configs/first-hit-selection.yaml"
+#PYTORCH_CMD="python run_tracking.py fit --config configs/first-hit-selection.yaml --trainer.devices 1"
 
 # Do testing instead
 #PYTORCH_CMD="python run_filtering.py test --config /share/rcifdata/svanstroud/hepattn/logs/ec_eta4_20250409-T184858/config.yaml --ckpt_path /share/rcifdata/svanstroud/hepattn/logs/ec_eta4_20250409-T184858/ckpts/epoch=029-val_loss=0.05526.ckpt"
@@ -52,7 +52,8 @@ PYTORCH_CMD="python run_tracking.py fit --config configs/tracking.yaml --trainer
 PIXI_CMD="pixi run $PYTORCH_CMD"
 
 # Apptainer command that runs the pixi command inside the pixi apptainer image
-APPTAINER_CMD="srun apptainer run --nv --bind /share/rcif2/ /share/rcif2/mmangat/hepattn/pixi.sif $PIXI_CMD"
+#APPTAINER_CMD="srun apptainer run --nv --bind /share/rcif2/ /share/rcif2/mmangat/hepattn/pixi.sif $PIXI_CMD"
+APPTAINER_CMD="apptainer run --nv --bind /share/rcif2/ /share/rcif2/mmangat/hepattn/pixi.sif $PIXI_CMD"
 
 # Run the final command
 echo "Running command: $APPTAINER_CMD"
