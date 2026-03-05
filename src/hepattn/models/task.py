@@ -1186,6 +1186,7 @@ class ClassificationTask(Task):
         self.threshold = threshold
         self.multilabel = multilabel
         self.net = net
+        self.target_field = self.classes[0] if len(self.classes) == 1 else None
 
         if self.class_weights is not None:
             self.class_weights_values = torch.tensor([self.class_weights[class_name] for class_name in self.classes])
