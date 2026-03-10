@@ -8,14 +8,18 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=10
 #SBATCH --mem=50G
-#SBATCH --output=/share/rcifdata/svanstroud/slurm_logs/slurm-%j.%x.out
+#SBATCH --output=/share/rcif2/mmangat/slurm_logs/slurm-%j.%x.out
 
+
+cd /share/rcif2/mmangat/hepattn
+
+source .env
 
 # Comet variables
 echo "Setting comet experiment key"
 timestamp=$( date +%s )
-COMET_EXPERIMENT_KEY=$timestamp
-echo $COMET_EXPERIMENT_KEY
+#export COMET_EXPERIMENT_KEY="$timestamp"
+#echo $COMET_EXPERIMENT_KEY
 echo "COMET_WORKSPACE"
 echo $COMET_WORKSPACE
 
@@ -25,7 +29,8 @@ echo "CPU count: $(cat /proc/cpuinfo | awk '/^processor/{print $3}' | tail -1)"
 echo "CUDA_VISIBLE_DEVICES: $CUDA_VISIBLE_DEVICES"
 
 # Move to workdir
-cd /share/rcifdata/svanstroud/hepattn/src/hepattn/experiments/trackml/
+
+cd /share/rcif2/mmangat/hepattn/src/hepattn/experiments/trackml/
 echo "Moved dir, now in: ${PWD}"
 
 # Set tmpdir
@@ -38,17 +43,17 @@ nvidia-smi
 echo "Running training script..."
 
 # Python command that will be run
-PYTORCH_CMD="python run_filtering.py fit --config configs/first_hit_selection.yaml"
+#PYTORCH_CMD="python run_filtering.py fit --config configs/first_hit_selection.yaml"
 # PYTORCH_CMD="python run_tracking.py fit --config configs/tracking.yaml"
 
 # Do testing instead
-#PYTORCH_CMD="python run_filtering.py test --config /share/rcifdata/svanstroud/hepattn/logs/ec_eta4_20250409-T184858/config.yaml --ckpt_path /share/rcifdata/svanstroud/hepattn/logs/ec_eta4_20250409-T184858/ckpts/epoch=029-val_loss=0.05526.ckpt"
+PYTORCH_CMD="python run_filtering.py test --config /share/rcif2/mmangat/logs/HF-900MeV-eta4_20260305-T105911/config.yaml"
 
 # Pixi commnand that runs the python command inside the pixi env
 PIXI_CMD="pixi run $PYTORCH_CMD"
 
 # Apptainer command that runs the pixi command inside the pixi apptainer image
-APPTAINER_CMD="srun apptainer run --nv --bind /share/rcifdata/ /share/rcifdata/svanstroud/hepattn/pixi.sif $PIXI_CMD"
+APPTAINER_CMD="srun apptainer run --nv --bind /share/rcif2/ /share/rcif2/mmangat/hepattn/pixi.sif $PIXI_CMD"
 
 # Run the final command
 echo "Running command: $APPTAINER_CMD"
