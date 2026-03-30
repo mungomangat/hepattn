@@ -1,7 +1,9 @@
 import comet_ml  # noqa: F401
+import numpy as np
 import torch
 from lightning.pytorch.cli import ArgsType
-from torch import nn
+from torch import Tensor, nn
+from pathlib import Path
 
 from hepattn.experiments.trackml.data import TrackMLDataModule
 from hepattn.models.wrapper import ModelWrapper
@@ -18,6 +20,197 @@ class TrackMLTracker(ModelWrapper):
         mtl: bool = False,
     ):
         super().__init__(name, model, lrs_config, optimizer, mtl)
+        self._first_hit_eta_edges = np.linspace(-5.0, 5.0, 81)
+        self._first_hit_r_edges = np.linspace(0.0, 1.5, 81)
+        self._first_hit_stats: dict[str, dict[str, torch.Tensor]] = {}
+
+    def _reset_first_hit_stats(self, stage: str) -> None:
+        eta_bins = len(self._first_hit_eta_edges) - 1
+        r_bins = len(self._first_hit_r_edges) - 1
+        self._first_hit_stats[stage] = {
+            "eta_tp": torch.zeros(eta_bins, dtype=torch.float64),
+            "eta_fn": torch.zeros(eta_bins, dtype=torch.float64),
+            "eta_fp": torch.zeros(eta_bins, dtype=torch.float64),
+            "eta_true": torch.zeros(eta_bins, dtype=torch.float64),
+            "eta_pred": torch.zeros(eta_bins, dtype=torch.float64),
+            "eta_r_tp": torch.zeros((eta_bins, r_bins), dtype=torch.float64),
+            "eta_r_fn": torch.zeros((eta_bins, r_bins), dtype=torch.float64),
+            "eta_r_fp": torch.zeros((eta_bins, r_bins), dtype=torch.float64),
+        }
+
+    def _accumulate_first_hit_hists(
+        self,
+        stage: str,
+        eta_vals: np.ndarray,
+        r_vals: np.ndarray,
+        tp_mask: np.ndarray,
+        fn_mask: np.ndarray,
+        fp_mask: np.ndarray,
+        true_mask: np.ndarray,
+        pred_mask: np.ndarray,
+    ) -> None:
+        stats = self._first_hit_stats[stage]
+        eta_edges = self._first_hit_eta_edges
+        r_edges = self._first_hit_r_edges
+
+        stats["eta_tp"] += torch.from_numpy(np.histogram(eta_vals[tp_mask], bins=eta_edges)[0]).to(dtype=torch.float64)
+        stats["eta_fn"] += torch.from_numpy(np.histogram(eta_vals[fn_mask], bins=eta_edges)[0]).to(dtype=torch.float64)
+        stats["eta_fp"] += torch.from_numpy(np.histogram(eta_vals[fp_mask], bins=eta_edges)[0]).to(dtype=torch.float64)
+        stats["eta_true"] += torch.from_numpy(np.histogram(eta_vals[true_mask], bins=eta_edges)[0]).to(dtype=torch.float64)
+        stats["eta_pred"] += torch.from_numpy(np.histogram(eta_vals[pred_mask], bins=eta_edges)[0]).to(dtype=torch.float64)
+
+        stats["eta_r_tp"] += torch.from_numpy(np.histogram2d(eta_vals[tp_mask], r_vals[tp_mask], bins=[eta_edges, r_edges])[0]).to(
+            dtype=torch.float64
+        )
+        stats["eta_r_fn"] += torch.from_numpy(np.histogram2d(eta_vals[fn_mask], r_vals[fn_mask], bins=[eta_edges, r_edges])[0]).to(
+            dtype=torch.float64
+        )
+        stats["eta_r_fp"] += torch.from_numpy(np.histogram2d(eta_vals[fp_mask], r_vals[fp_mask], bins=[eta_edges, r_edges])[0]).to(
+            dtype=torch.float64
+        )
+
+    def _update_first_hit_stats(self, inputs: dict[str, Tensor], preds: dict, targets: dict[str, Tensor], stage: str) -> None:
+        stage_stats = self._first_hit_stats.get(stage)
+        if stage_stats is None:
+            return
+
+        encoder_preds = preds.get("encoder", {})
+        query_init_preds = encoder_preds.get("query_init")
+        if query_init_preds is None:
+            return
+
+        pred_first = query_init_preds.get("hit_is_first")
+        true_first = targets.get("hit_is_first")
+        hit_eta = inputs.get("hit_eta")
+        hit_r = inputs.get("hit_r")
+        if pred_first is None or true_first is None or hit_eta is None or hit_r is None:
+            return
+
+        pred_first = pred_first.bool()
+        true_first = true_first.bool()
+        hit_valid = targets.get("hit_valid")
+        valid = hit_valid.bool() if hit_valid is not None else torch.ones_like(true_first, dtype=torch.bool)
+
+        tp = pred_first & true_first & valid
+        fn = (~pred_first) & true_first & valid
+        fp = pred_first & (~true_first) & valid
+        true_mask = true_first & valid
+        pred_mask = pred_first & valid
+
+        eta_vals = hit_eta.detach().to(torch.float32).cpu().numpy().reshape(-1)
+        r_vals = hit_r.detach().to(torch.float32).cpu().numpy().reshape(-1)
+
+        self._accumulate_first_hit_hists(
+            stage=stage,
+            eta_vals=eta_vals,
+            r_vals=r_vals,
+            tp_mask=tp.detach().cpu().numpy().reshape(-1),
+            fn_mask=fn.detach().cpu().numpy().reshape(-1),
+            fp_mask=fp.detach().cpu().numpy().reshape(-1),
+            true_mask=true_mask.detach().cpu().numpy().reshape(-1),
+            pred_mask=pred_mask.detach().cpu().numpy().reshape(-1),
+        )
+
+    def _gather_hist(self, hist: torch.Tensor) -> torch.Tensor:
+        gathered = self.all_gather(hist.to(self.device))
+        if gathered.dim() == hist.dim():
+            return gathered.detach().cpu()
+        return gathered.sum(dim=0).detach().cpu()
+
+    def _save_first_hit_plots(self, stage: str, stats: dict[str, torch.Tensor]) -> None:
+        import matplotlib
+
+        matplotlib.use("Agg", force=True)
+        import matplotlib.pyplot as plt
+
+        out_dir = Path(self.trainer.default_root_dir) / "first_hit_diagnostics" / f"{stage}_epoch{int(self.current_epoch):03d}"
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        eta_edges = self._first_hit_eta_edges
+        r_edges = self._first_hit_r_edges
+        eta_centers = 0.5 * (eta_edges[:-1] + eta_edges[1:])
+        eta_width = eta_edges[1] - eta_edges[0]
+
+        eta_tp = stats["eta_tp"].numpy()
+        eta_fn = stats["eta_fn"].numpy()
+        eta_fp = stats["eta_fp"].numpy()
+
+        fig, ax = plt.subplots(figsize=(10, 5))
+        ax.step(eta_centers, eta_tp, where="mid", label="TP (correct first-hit predictions)")
+        ax.step(eta_centers, eta_fn, where="mid", label="FN (missed true first hits)")
+        ax.step(eta_centers, eta_fp, where="mid", label="FP (incorrect first-hit predictions)")
+        ax.set_xlabel("eta")
+        ax.set_ylabel("count")
+        ax.set_title(f"{stage}: first-hit prediction outcomes vs eta")
+        ax.grid(alpha=0.25, linestyle="--")
+        ax.legend()
+        fig.tight_layout()
+        fig.savefig(out_dir / "first_hit_outcomes_eta.png", dpi=180)
+        plt.close(fig)
+
+        eta_true = stats["eta_true"].numpy()
+        eta_pred = stats["eta_pred"].numpy()
+        eta_recall = np.divide(eta_tp, eta_true, out=np.zeros_like(eta_tp, dtype=float), where=eta_true > 0)
+        eta_precision = np.divide(eta_tp, eta_pred, out=np.zeros_like(eta_tp, dtype=float), where=eta_pred > 0)
+
+        fig, ax = plt.subplots(figsize=(10, 5))
+        ax.bar(eta_centers - 0.5 * eta_width, eta_recall, width=eta_width, label="recall", alpha=0.7)
+        ax.bar(eta_centers + 0.5 * eta_width, eta_precision, width=eta_width, label="precision", alpha=0.7)
+        ax.set_xlabel("eta")
+        ax.set_ylabel("score")
+        ax.set_ylim(0.0, 1.0)
+        ax.set_title(f"{stage}: first-hit recall/precision vs eta")
+        ax.grid(alpha=0.25, linestyle="--")
+        ax.legend()
+        fig.tight_layout()
+        fig.savefig(out_dir / "first_hit_recall_precision_eta.png", dpi=180)
+        plt.close(fig)
+
+        extent = [eta_edges[0], eta_edges[-1], r_edges[0], r_edges[-1]]
+        eta_r_maps = [
+            ("TP (correct)", stats["eta_r_tp"].numpy(), "Greens"),
+            ("FN (missed)", stats["eta_r_fn"].numpy(), "Blues"),
+            ("FP (incorrect)", stats["eta_r_fp"].numpy(), "Reds"),
+        ]
+
+        fig, axes = plt.subplots(1, 3, figsize=(18, 5), constrained_layout=True)
+        for ax, (title, arr, cmap) in zip(axes, eta_r_maps):
+            im = ax.imshow(arr.T, origin="lower", aspect="auto", extent=extent, interpolation="nearest", cmap=cmap)
+            ax.set_xlabel("eta")
+            ax.set_ylabel("r [m]")
+            ax.set_title(title)
+            fig.colorbar(im, ax=ax)
+        fig.suptitle(f"{stage}: first-hit prediction outcomes in eta-r")
+        fig.savefig(out_dir / "first_hit_outcomes_eta_r.png", dpi=180)
+        plt.close(fig)
+
+    def _finalize_first_hit_stats(self, stage: str) -> None:
+        stats = self._first_hit_stats.get(stage)
+        if stats is None:
+            return
+
+        gathered = {k: self._gather_hist(v) for k, v in stats.items()}
+        tp_total = gathered["eta_tp"].sum()
+        fn_total = gathered["eta_fn"].sum()
+        fp_total = gathered["eta_fp"].sum()
+        true_total = gathered["eta_true"].sum()
+        pred_total = gathered["eta_pred"].sum()
+
+        recall = tp_total / true_total if true_total > 0 else 0.0
+        precision = tp_total / pred_total if pred_total > 0 else 0.0
+        miss_rate = fn_total / true_total if true_total > 0 else 0.0
+        false_discovery = fp_total / pred_total if pred_total > 0 else 0.0
+
+        self.log(f"{stage}/first_hit_tp", float(tp_total), sync_dist=True)
+        self.log(f"{stage}/first_hit_fn", float(fn_total), sync_dist=True)
+        self.log(f"{stage}/first_hit_fp", float(fp_total), sync_dist=True)
+        self.log(f"{stage}/first_hit_recall", float(recall), sync_dist=True)
+        self.log(f"{stage}/first_hit_precision", float(precision), sync_dist=True)
+        self.log(f"{stage}/first_hit_miss_rate", float(miss_rate), sync_dist=True)
+        self.log(f"{stage}/first_hit_false_discovery", float(false_discovery), sync_dist=True)
+
+        if self.trainer.is_global_zero:
+            self._save_first_hit_plots(stage, gathered)
 
     def log_custom_metrics(self, preds, targets, stage):
         query_mask = targets.get("query_mask")
@@ -104,6 +297,50 @@ class TrackMLTracker(ModelWrapper):
         self.log(f"{stage}/num_hits", num_hits_total, sync_dist=True)
         self.log(f"{stage}/num_hits_valid", num_hits_valid, sync_dist=True)
         self.log(f"{stage}/num_hits_noise", num_hits_noise, sync_dist=True)
+
+    def on_validation_epoch_start(self) -> None:
+        self._reset_first_hit_stats("val")
+
+    def on_validation_epoch_end(self) -> None:
+        self._finalize_first_hit_stats("val")
+
+    def on_test_epoch_start(self) -> None:
+        self._reset_first_hit_stats("test")
+
+    def on_test_epoch_end(self) -> None:
+        self._finalize_first_hit_stats("test")
+
+    def validation_step(self, batch: tuple[dict[str, Tensor], dict[str, Tensor]]) -> dict[str, Tensor]:
+        inputs, targets = batch
+
+        # Get the raw model outputs
+        outputs = self.model(inputs)
+
+        # Compute losses then aggregate and log them
+        outputs, targets, losses = self.model.loss(outputs, targets)
+        total_loss = self.aggregate_losses(losses, stage="val")
+
+        # Get the predictions from the model
+        preds = self.model.predict(outputs)
+        self.log_metrics(preds, targets, "val")
+        self._update_first_hit_stats(inputs, preds, targets, stage="val")
+
+        return {"loss": total_loss, "attn_mask_outputs": outputs}
+
+    def test_step(
+        self, batch: tuple[dict[str, Tensor], dict[str, Tensor]]
+    ) -> tuple[dict[str, Tensor], dict[str, Tensor], dict[str, Tensor], dict[str, Tensor]]:
+        """TrackML override: include post-loss targets for prediction writing.
+
+        The post-loss targets are sorter-aligned when a sorter is configured, which keeps
+        saved targets and saved predictions on the same hit ordering in eval files.
+        """
+        inputs, targets = batch
+        outputs = self.model(inputs)
+        outputs, targets, losses = self.model.loss(outputs, targets)
+        preds = self.model.predict(outputs)
+        self._update_first_hit_stats(inputs, preds, targets, stage="test")
+        return outputs, preds, losses, targets
 
 
 def main(args: ArgsType = None) -> None:
