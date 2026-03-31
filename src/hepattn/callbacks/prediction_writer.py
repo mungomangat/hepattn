@@ -57,8 +57,20 @@ class PredictionWriter(Callback):
         return Path(self.trainer.ckpt_dir / f"{self.trainer.ckpt_name}_{split}_eval.h5")
 
     def on_test_batch_end(self, trainer, pl_module, test_step_outputs, batch, batch_idx):
-        inputs, targets = batch
-        outputs, preds, losses = test_step_outputs
+        inputs, batch_targets = batch
+
+        # Support both legacy (outputs, preds, losses) and new
+        # (outputs, preds, losses, targets) test_step contracts.
+        if len(test_step_outputs) == 4:
+            outputs, preds, losses, targets = test_step_outputs
+        elif len(test_step_outputs) == 3:
+            outputs, preds, losses = test_step_outputs
+            targets = batch_targets
+        else:
+            raise ValueError(
+                "PredictionWriter expected test_step_outputs with 3 or 4 items "
+                f"(got {len(test_step_outputs)})."
+            )
 
         # handle batched case
         if "sample_id" in targets:
