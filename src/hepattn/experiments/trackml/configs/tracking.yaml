@@ -114,6 +114,7 @@ trainer:
         write_preds: true
         write_targets: true
         write_losses: false
+        write_layers: [encoder, final]
     - class_path: lightning.pytorch.callbacks.LearningRateMonitor
     - class_path: lightning.pytorch.callbacks.TQDMProgressBar
       init_args:
