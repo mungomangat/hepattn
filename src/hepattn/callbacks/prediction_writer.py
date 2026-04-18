@@ -128,6 +128,8 @@ class PredictionWriter(Callback):
                 continue
             layer_group = items_group.create_group(layer_name)
             for task_name, task_items in layer_items.items():
+                if not isinstance(task_items, dict):
+                    continue
                 task_group = layer_group.create_group(task_name)
                 for name, value in task_items.items():
                     self.create_dataset(task_group, name, value[idx][None, ...])
