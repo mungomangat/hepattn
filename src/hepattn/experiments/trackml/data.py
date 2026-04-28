@@ -243,7 +243,8 @@ class TrackMLDataset(Dataset):
         # Mark which hits are the first (innermost) hit on each particle track
         # Only calculate for hits on valid particles
         valid_hits = hits[hits["on_valid_particle"]]
-        first_hit_indices = valid_hits.groupby("particle_id")["r"].idxmin()
+        # first_hit_indices = valid_hits.groupby("particle_id")["r"].idxmin()
+        first_hit_indices = valid_hits.groupby("particle_id")["r"].idxmax()  # Temporary last hit dynamic query initialisation
         hits["is_first"] = False
         hits.loc[first_hit_indices, "is_first"] = True
 
