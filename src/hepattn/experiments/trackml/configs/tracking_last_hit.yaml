@@ -1,5 +1,5 @@
 seed_everything: 42
-name: TRK-v8-3l-fast-fix-vec
+name: TRK-v8-3l-fast-fix-vec-last-hit
 data:
   # hypatia
   train_dir: /share/rcif2/pduckett/data/prepped/train/
@@ -17,6 +17,7 @@ data:
   # hit_eval_val: /lus/lfs1aip2/projects/u5du/svanstroud/logs/HF-600MeV-eta2.5_20251208-T205400/ckpts/epoch=079-val_loss=0.11373_val_eval.h5
   # hit_eval_test: /lus/lfs1aip2/projects/u5du/svanstroud/logs/HF-600MeV-eta2.5_20251208-T205400/ckpts/epoch=079-val_loss=0.11373_test_eval.h5
   hit_filter_threshold: 0.2
+  query_init_hit: last
   
   num_workers: 15
   num_train: -1

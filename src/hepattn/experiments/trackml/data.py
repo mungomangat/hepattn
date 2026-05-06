@@ -31,6 +31,7 @@ class TrackMLDataset(Dataset):
         hit_eval_path: str | None = None,
         hit_filter_threshold: float = 0.1,
         dummy_data: bool = False,
+        query_init_hit: str = "first",
     ):
         super().__init__()
 
@@ -53,6 +54,7 @@ class TrackMLDataset(Dataset):
             self.event_names = [f"dummy_event_{i:06d}" for i in range(self.num_events)]
             self.sample_ids = list(range(self.num_events))
             self.hit_volume_ids = hit_volume_ids
+            self.query_init_hit = query_init_hit
             self.particle_min_pt = particle_min_pt
             self.particle_max_abs_eta = particle_max_abs_eta
             self.particle_min_num_hits = particle_min_num_hits
@@ -93,6 +95,7 @@ class TrackMLDataset(Dataset):
         self.hit_volume_ids = hit_volume_ids
         # Optional per-feature hit volume selections
         self.feature_volume_ids = feature_volume_ids
+        self.query_init_hit = query_init_hit
 
         # Particle level cuts
         self.particle_min_pt = particle_min_pt
@@ -240,13 +243,16 @@ class TrackMLDataset(Dataset):
         # Mark which hits are on a valid / reconstructable particle, for the hit filter
         hits["on_valid_particle"] = hits["particle_id"].isin(particles["particle_id"])
 
-        # Mark which hits are the first (innermost) hit on each particle track
-        # Only calculate for hits on valid particles
+        # Mark which hits are the first (innermost) or last (outermost) hit on each particle track
         valid_hits = hits[hits["on_valid_particle"]]
-        # first_hit_indices = valid_hits.groupby("particle_id")["r"].idxmin()
-        first_hit_indices = valid_hits.groupby("particle_id")["r"].idxmin()  # Temporary last hit dynamic query initialisation
+        if self.query_init_hit == "first":
+            selected_hit_indices = valid_hits.groupby("particle_id")["r"].idxmin()
+        elif self.query_init_hit == "last":
+            selected_hit_indices = valid_hits.groupby("particle_id")["r"].idxmax()
+        else:
+            raise ValueError(f"query_init_hit must be 'first' or 'last', got {self.query_init_hit!r}")
         hits["is_first"] = False
-        hits.loc[first_hit_indices, "is_first"] = True
+        hits.loc[selected_hit_indices, "is_first"] = True
 
         # Sanity checks
         assert len(particles) != 0, "No particles remaining - loosen selection!"
