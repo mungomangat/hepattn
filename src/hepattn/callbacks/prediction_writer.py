@@ -46,7 +46,8 @@ class PredictionWriter(Callback):
         self.file = h5py.File(self.output_path, "w")
 
     def _resolve_num_queries(self, pl_module: LightningModule) -> int:
-        # User assumption: model.decoder._num_queries is always available.
+        if not hasattr(pl_module.model, "decoder"):
+            return 0
         return int(pl_module.model.decoder._num_queries)  # noqa: SLF001
 
     @property
