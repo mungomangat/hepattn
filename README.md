@@ -112,6 +112,18 @@ See experiment directories for instructions on how to run experiments.
 - [TrackML Tracking](src/hepattn/experiments/trackml/)
 - [CLIC Particle Flow](src/hepattn/experiments/clic/)
 
+## 📎 Paper Reproduction Artifacts
+
+The exact trained checkpoints behind ["Better Queries, Cheaper Attention"][dq-paper]
+(arXiv:2606.17631) are committed in this branch under
+[`configs/paper/BEST_CKPTS/`](src/hepattn/experiments/trackml/configs/paper/BEST_CKPTS/)
+(5 published tracking models) and
+[`HIT_FILTER_CKPTS/`](src/hepattn/experiments/trackml/configs/paper/HIT_FILTER_CKPTS/)
+(the upstream pixel hit-filter models they depend on), tracked via git-lfs. See each
+directory's README for the checkpoint-to-paper-label mapping and usage notes.
+
+[dq-paper]: https://arxiv.org/abs/2606.17631
+
 ## 📖 Terminology
 
 To ensure clarity and consistency throughout this project, we use the following definitions:

@@ -80,3 +80,11 @@ hit_eval_train: /share/rcifdata/svanstroud/hepattn/src/hepattn/experiments/track
 hit_eval_val: /share/rcifdata/svanstroud/hepattn/src/hepattn/experiments/trackml/logs/HC-v3-lite_20250620-T114025/ckpts/epoch=016-val_loss=0.15730_val_eval.h5
 hit_eval_test: /share/rcifdata/svanstroud/hepattn/src/hepattn/experiments/trackml/logs/HC-v3-lite_20250620-T114025/ckpts/epoch=016-val_loss=0.15730_test_eval.h5
 ```
+
+## Paper reproduction artifacts
+
+`configs/paper/BEST_CKPTS/` and `configs/paper/HIT_FILTER_CKPTS/` hold the actual
+trained checkpoints (via git-lfs) behind arXiv:2606.17631 ("Better Queries, Cheaper
+Attention") — not templates, the real weights used for the paper's tables/figures.
+See the README in each directory for the checkpoint→paper-label mapping and usage
+notes.

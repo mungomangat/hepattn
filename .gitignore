@@ -124,6 +124,11 @@ core
 *.pkl
 *.lock
 *.cpp
+
+# Paper reproduction artifacts (explicitly tracked, see configs/paper/)
+!src/hepattn/experiments/trackml/configs/paper/BEST_CKPTS/**/*.ckpt
+!src/hepattn/experiments/trackml/configs/paper/HIT_FILTER_CKPTS/**/*.ckpt
+!src/hepattn/experiments/trackml/configs/paper/environment_lock/pixi.lock
 *.h
 *.gch
 
