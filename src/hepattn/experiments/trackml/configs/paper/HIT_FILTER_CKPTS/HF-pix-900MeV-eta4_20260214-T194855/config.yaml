@@ -40,7 +40,7 @@ trainer:
       every_n_epochs: null
       save_on_train_epoch_end: null
       enable_version_counter: true
-  - class_path: hepattn.callbacks.PredictionWriter
+  - class_path: hepattn.callbacks.GenericPredictionWriter
     init_args:
       write_inputs: false
       write_outputs: false
