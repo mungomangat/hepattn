@@ -119,8 +119,10 @@ The exact trained checkpoints behind ["Better Queries, Cheaper Attention"][dq-pa
 [`configs/paper/BEST_CKPTS/`](src/hepattn/experiments/trackml/configs/paper/BEST_CKPTS/)
 (5 published tracking models) and
 [`HIT_FILTER_CKPTS/`](src/hepattn/experiments/trackml/configs/paper/HIT_FILTER_CKPTS/)
-(the upstream pixel hit-filter models they depend on), tracked via git-lfs. See each
-directory's README for the checkpoint-to-paper-label mapping and usage notes.
+(the upstream pixel hit-filter models they depend on), tracked via git-lfs. See
+[`trackml/README.md`](src/hepattn/experiments/trackml/README.md)'s "Paper
+reproduction artifacts" section for the checkpoint-to-paper-label mapping and usage
+notes.
 
 [dq-paper]: https://arxiv.org/abs/2606.17631
 
